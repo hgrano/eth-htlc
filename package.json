@@ -1,0 +1,13 @@
+{
+  "name": "hardhat-project",
+  "devDependencies": {
+    "@daml.js/create-daml-app": "file:daml.js/daml-eth-htlc-0.1.0",
+    "@daml/ledger": "2.2.1",
+    "@daml/types": "2.2.1",
+    "@nomicfoundation/hardhat-toolbox": "^2.0.0",
+    "hardhat": "^2.12.4"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.8.0"
+  }
+}

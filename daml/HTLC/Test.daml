@@ -3,10 +3,16 @@ module HTLC.Test where
 import qualified DA.Map as Map
 import qualified DA.Optional as O
 import qualified DA.Set as Set
+import qualified DA.Time as T
+import qualified DA.Text as TX
+import qualified Daml.Finance.Account.Account as Account
+import qualified Daml.Finance.Interface.Account.Account as Account
+import qualified Daml.Finance.Interface.Account.Factory as AccountFactory
 import qualified Daml.Finance.Interface.Holding.Base as Holding
 import qualified Daml.Finance.Interface.Holding.Transferable as Transferable 
 import Daml.Finance.Interface.Types.Common.Types
-import Daml.Finance.Holding.Fungible
+import qualified Daml.Finance.Interface.Util.Disclosure as Disclosure
+import qualified Daml.Finance.Holding.Fungible as Fungible
 import Daml.Script
 import HTLC
 
@@ -22,10 +28,10 @@ data TestParties = TestParties
 data TestData = TestData
   with
     parties : TestParties
-    transferrableCid : ContractId Transferable.I -- Alice's holding
+    transferableCid : ContractId Transferable.I -- Alice's holding
     aliceAccount : AccountKey
     bobAccount : AccountKey
-    startTime : Time
+    unlockTime : Time
   deriving (Show, Eq)
 
 withSetup : (TestData -> Script a) -> Script ()
@@ -35,7 +41,8 @@ withSetup test = do
   depository <- allocateParty "depository"
   issuer <- allocateParty "issuer"
   custodian <- allocateParty "custodian"
-  let aliceAccount = AccountKey with
+  let allParties = Set.fromList [alice, bob, depository, issuer, custodian]
+      aliceAccount = AccountKey with
         custodian
         owner = alice
         id = Id "Alice@custodian"
@@ -43,24 +50,53 @@ withSetup test = do
         custodian
         owner = bob
         id = Id "Bob@custodian"
-  transferrableCid <- submitMulti [alice, custodian] [] $
-    createCmd Fungible with
-      instrument = InstrumentKey with
-        depository
-        issuer
-        id = Id "fungible1"
-        version = "0"
+  holdingFactoryCid <- submit issuer $
+    createCmd Fungible.Factory with
+      provider = issuer
+      observers = Map.fromList [("HTLC", allParties)]
+  accountFactoryCid <- submit depository $
+    createCmd Account.Factory with
+      provider = depository
+      observers = Map.fromList [("HTLC", allParties)]
+  aliceAccountCid <- submitMulti [alice, custodian] [] $
+    exerciseCmd @AccountFactory.F (toInterfaceContractId accountFactoryCid) AccountFactory.Create with
       account = aliceAccount
-      amount = 1.0
-      lock = None
-      observers = Map.fromList [("HTLC", Set.fromList [bob])]
+      holdingFactoryCid = toInterfaceContractId holdingFactoryCid
+      controllers = Account.Controllers with
+        outgoing = Set.empty
+        incoming = Set.empty
+      description = "Alice's account"
+      observers = Map.fromList [("HTLC", allParties)]
+  submitMulti [bob, custodian] [] $
+    exerciseCmd @AccountFactory.F (toInterfaceContractId accountFactoryCid) AccountFactory.Create with
+      account = bobAccount
+      holdingFactoryCid = toInterfaceContractId holdingFactoryCid
+      controllers = Account.Controllers with
+        outgoing = Set.empty
+        incoming = Set.empty
+      description = "Alice's account"
+      observers = Map.fromList [("HTLC", allParties)]
+  holdingCid <- submit custodian $
+    exerciseCmd aliceAccountCid Account.Credit with
+      quantity = Quantity with
+        unit = InstrumentKey with
+          depository
+          issuer
+          id = Id "fungible1"
+          version = "0"
+        amount = 1.0
+  holdingWithObserversCid <- submit alice $
+    exerciseCmd @Disclosure.I (toInterfaceContractId holdingCid) Disclosure.AddObservers with
+      disclosers = Set.fromList [alice]
+      observersToAdd = ("HTLC", allParties)
   startTime <- getTime
+  let unlockTime = T.addRelTime startTime (T.days 1)
   test $ TestData with
     parties = TestParties with alice, bob, depository, issuer, custodian
-    transferrableCid = toInterfaceContractId transferrableCid
+    transferableCid = coerceInterfaceContractId holdingWithObserversCid
     aliceAccount
     bobAccount
-    startTime
+    unlockTime
   pure ()
 
 test_HTLC_multisig : Script ()
@@ -69,9 +105,9 @@ test_HTLC_multisig = withSetup $ \testData -> do
     createCmd HTLC with
       sender = testData.parties.alice
       receiverAccount = testData.bobAccount
-      holdingCid = testData.transferrableCid
+      holdingCid = testData.transferableCid
       hash = "hash"
-      unlockTime = testData.startTime
+      unlockTime = testData.unlockTime
 
 test_HTLC_accept_holding_validation : Script ()
 test_HTLC_accept_holding_validation = withSetup $ \testData -> do
@@ -82,9 +118,9 @@ test_HTLC_accept_holding_validation = withSetup $ \testData -> do
     receiver = testData.parties.alice
     ethTokenAddress = "..."
     ethTokenQuantity = "..."
-    holdingCid = testData.transferrableCid
+    holdingCid = testData.transferableCid
     hash = "..."
-    unlockTime = testData.startTime
+    unlockTime = testData.unlockTime
   submitMustFail testData.parties.alice $ exerciseCmd proposalCid HTLCProposal_Accept with
     receiverAccount = testData.aliceAccount
 
@@ -96,12 +132,12 @@ test_HTLC_locking = withSetup $ \testData -> do
     receiver = testData.parties.bob
     ethTokenAddress = "..."
     ethTokenQuantity = "..."
-    holdingCid = testData.transferrableCid
+    holdingCid = testData.transferableCid
     hash = "..."
-    unlockTime = testData.startTime
+    unlockTime = testData.unlockTime
   htlcCid <- submit testData.parties.bob $ exerciseCmd proposalCid HTLCProposal_Accept with
     receiverAccount = testData.bobAccount
-  originalTransferable <- queryContractId testData.parties.alice testData.transferrableCid
+  originalTransferable <- queryContractId testData.parties.alice testData.transferableCid
   assertMsg "Original holding must be archived" (O.isNone originalTransferable)
   htlc <- O.fromSomeNote "HTLC contract must exist" <$> queryContractId testData.parties.alice htlcCid
   let newHoldingCid : ContractId Holding.I = toInterfaceContractId htlc.holdingCid
@@ -114,4 +150,28 @@ test_HTLC_locking = withSetup $ \testData -> do
   submitMustFail testData.parties.alice $ exerciseCmd htlc.holdingCid Transferable.Transfer with
     actors = Set.fromList [testData.parties.alice]
     newOwnerAccount = testData.bobAccount
-  pure ()
+
+test_HTLC_claiming : Script ()
+test_HTLC_claiming = withSetup $ \testData -> do
+  let preImage = "lorem ipsum"
+  proposalCid <- submit testData.parties.alice $ createCmd HTLCProposal with
+    sender = testData.parties.alice
+    senderEthAddress = "..."
+    receiver = testData.parties.bob
+    ethTokenAddress = "..."
+    ethTokenQuantity = "..."
+    holdingCid = testData.transferableCid
+    hash = TX.sha256 preImage
+    unlockTime = testData.unlockTime
+  htlcCid <- submit testData.parties.bob $ exerciseCmd proposalCid HTLCProposal_Accept with
+    receiverAccount = testData.bobAccount
+  setTime testData.unlockTime
+  -- Cannot claim on/after the unlock time
+  submitMustFail testData.parties.bob $ exerciseCmd htlcCid HTLC_Claim with preImage
+  setTime (T.addRelTime testData.unlockTime (negate $ T.hours 1))
+  -- Cannot claim without correct pre-image
+  submitMustFail testData.parties.bob $ exerciseCmd htlcCid HTLC_Claim with preImage = "invalid"
+  -- Other party cannot claim
+  submitMustFail testData.parties.alice $ exerciseCmd htlcCid HTLC_Claim with preImage
+  -- Can claim with valid pre-image
+  submit testData.parties.bob $ exerciseCmd htlcCid HTLC_Claim with preImage

@@ -17,7 +17,7 @@ data-dependencies:
   # IMPLEMENTATION DEPENDENCIES
   #- .lib/daml-finance-account.dar
   #- .lib/daml-finance-data.dar
-  #- .lib/daml-finance-holding.dar
+  - .lib/daml-finance-holding.dar
   #- .lib/daml-finance-instrument-token.dar
   #- .lib/daml-finance-lifecycle.dar
   #- .lib/daml-finance-settlement.dar

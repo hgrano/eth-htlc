@@ -14,13 +14,35 @@ contract HTLC {
 
     mapping(bytes32 => Lock) public locks;
 
-    event Claimed(bytes preImage, bytes32 hashValue, uint when, uint amount, address tokenAddress, address senderAddress, address receiverAddress);
+    event Claimed(
+        bytes preImage,
+        bytes32 hashValue,
+        uint when,
+        uint amount,
+        address tokenAddress,
+        address senderAddress,
+        address receiverAddress
+    );
 
-    event Locked(bytes32 hashValue, uint when, uint amount, address tokenAddress, address senderAddress, address receiverAddress);
+    event Locked(
+        bytes32 hashValue,
+        uint when,
+        uint amount,
+        address tokenAddress,
+        address senderAddress,
+        address receiverAddress
+    );
 
-    event Retaken(bytes32 hashValue, uint when, uint amount, address tokenAddress, address senderAddress, address receiverAddress);
+    event Retaken(
+        bytes32 hashValue,
+        uint when,
+        uint amount,
+        address tokenAddress,
+        address senderAddress,
+        address receiverAddress
+    );
 
-    function claim(bytes memory preImage) public {
+    function claim(bytes calldata preImage) external {
         bytes32 hashValue = keccak256(preImage);
         Lock storage l = locks[hashValue];
         uint amount = l.amount;
@@ -45,7 +67,7 @@ contract HTLC {
         });
     }
 
-    function lock(bytes32 hashValue, uint unlockTime, uint amount, address tokenAddress, address receiverAddress) public {
+    function lock(bytes32 hashValue, uint unlockTime, uint amount, address tokenAddress, address receiverAddress) external {
         require(locks[hashValue].amount == 0, "HTLC: lock cannot already exist for the same hash value");
         require(amount > 0, "HTLC: cannot lock zero tokens");
 
@@ -62,7 +84,7 @@ contract HTLC {
         require(erc20.transferFrom(msg.sender, address(this), amount), "HTLC: erc20 transfer for locking must be successful");
     }
 
-    function retake(bytes32 hashValue) public {
+    function retake(bytes32 hashValue) external {
         Lock storage l = locks[hashValue];
         uint amount = l.amount;
         require(amount > 0, "HTLC: no lock exists for the given hash");

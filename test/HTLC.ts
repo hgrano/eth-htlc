@@ -22,7 +22,7 @@ describe("HTLC", function () {
     await testToken.connect(bob).approve(htlc.address, 100);
 
     const preImage = "0xffffff";
-    const hashValue = ethers.utils.sha256(preImage);
+    const hashValue = ethers.utils.keccak256(preImage);
 
     return { htlc, testToken, alice, bob, preImage, hashValue, unlockTime };
   }

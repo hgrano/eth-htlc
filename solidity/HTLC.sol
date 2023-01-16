@@ -21,7 +21,7 @@ contract HTLC {
     event Retaken(bytes32 hashValue, uint when, uint amount, address tokenAddress, address senderAddress, address receiverAddress);
 
     function claim(bytes memory preImage) public {
-        bytes32 hashValue = sha256(preImage);
+        bytes32 hashValue = keccak256(preImage);
         Lock storage l = locks[hashValue];
         uint amount = l.amount;
         require(amount > 0, "HTLC: not a valid pre-image for any hash");

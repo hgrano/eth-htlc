@@ -117,8 +117,8 @@ describe("HTLC", function () {
     });
   });
 
-  describe("Unlocking", function () {
-    it("Should not allow unlocking before the time window has elapsed", async function () {
+  describe("Retaking", function () {
+    it("Should not allow retaking before the time window has elapsed", async function () {
       const { htlc, testToken, alice, bob, hashValue, unlockTime } = await loadFixture(
         deployHTLCFixture
       );
@@ -126,12 +126,12 @@ describe("HTLC", function () {
 
       await htlc.connect(alice).lock(hashValue, unlockTime, lockedAmount, testToken.address, bob.address);
 
-      await expect(htlc.connect(alice).unlock(hashValue)).to.be.revertedWith(
-        "HTLC: can only unlock on or after the unlock time"
+      await expect(htlc.connect(alice).retake(hashValue)).to.be.revertedWith(
+        "HTLC: can only retake on or after the unlock time"
       );
     });
 
-    it("Should not allow other account to unlock", async function () {
+    it("Should not allow other account to retake", async function () {
       const { htlc, testToken, alice, bob, hashValue, unlockTime } = await loadFixture(
         deployHTLCFixture
       );
@@ -141,8 +141,8 @@ describe("HTLC", function () {
 
       await time.increaseTo(unlockTime);
 
-      await expect(htlc.connect(bob).unlock(hashValue)).to.be.revertedWith(
-        "HTLC: only the sender can unlock"
+      await expect(htlc.connect(bob).retake(hashValue)).to.be.revertedWith(
+        "HTLC: only the sender can retake"
       );
     });
 
@@ -156,7 +156,7 @@ describe("HTLC", function () {
 
       await time.increaseTo(unlockTime);
 
-      await expect(htlc.connect(alice).unlock(hashValue)).to.changeTokenBalances(
+      await expect(htlc.connect(alice).retake(hashValue)).to.changeTokenBalances(
         testToken,
         [alice, htlc],
         [lockedAmount, -lockedAmount]

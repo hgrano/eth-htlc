@@ -174,4 +174,9 @@ test_HTLC_claiming = withSetup $ \testData -> do
   -- Other party cannot claim
   submitMustFail testData.parties.alice $ exerciseCmd htlcCid HTLC_Claim with preImage
   -- Can claim with valid pre-image
-  submit testData.parties.bob $ exerciseCmd htlcCid HTLC_Claim with preImage
+  transferedHoldingCid <- submit testData.parties.bob $ exerciseCmd htlcCid HTLC_Claim with preImage
+  transferredHolding <- O.fromSomeNote "Transferred holding contract must exist" <$>
+    queryInterfaceContractId @Holding.I testData.parties.custodian (toInterfaceContractId transferedHoldingCid)
+  assertMsg "New owner must be the recipient" (transferredHolding.account.owner == testData.parties.bob)
+  assertMsg "Transferred holding must not be locked" (O.isNone transferredHolding.lock)
+  pure ()

@@ -67,7 +67,13 @@ contract HTLC {
         });
     }
 
-    function lock(bytes32 hashValue, uint unlockTime, uint amount, address tokenAddress, address receiverAddress) external {
+    function lock(
+        bytes32 hashValue,
+        uint unlockTime,
+        uint amount,
+        address tokenAddress,
+        address receiverAddress
+    ) external {
         require(locks[hashValue].amount == 0, "HTLC: lock cannot already exist for the same hash value");
         require(amount > 0, "HTLC: cannot lock zero tokens");
 
@@ -81,7 +87,10 @@ contract HTLC {
 
         IERC20 erc20 = IERC20(tokenAddress);
 
-        require(erc20.transferFrom(msg.sender, address(this), amount), "HTLC: erc20 transfer for locking must be successful");
+        require(
+            erc20.transferFrom(msg.sender, address(this), amount),
+            "HTLC: erc20 transfer for locking must be successful"
+        );
     }
 
     function retake(bytes32 hashValue) external {
